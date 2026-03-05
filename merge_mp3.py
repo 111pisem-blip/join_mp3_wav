@@ -54,30 +54,12 @@ def make_silence(duration: float, filename: Path, ext: str):
     subprocess.run(cmd, check=True)
 
 
-def main():
-    print("=== AUDIO MERGER WITH SILENCE (MP3/WAV) ===")
-
-    OUTPUT_FOLDER.mkdir(exist_ok=True)
-
-    # Ищем файлы
-    mp3_files = sorted(INPUT_FOLDER.glob("*.mp3"), key=numeric_key)
-    wav_files = sorted(INPUT_FOLDER.glob("*.wav"), key=numeric_key)
-
-    # Определяем, с чем работаем: приоритет WAV, потом MP3
-    if wav_files:
-        audio_files = wav_files
-        ext = ".wav"
-        print("Найдены WAV-файлы, MP3 (если есть) будут проигнорированы.")
-    elif mp3_files:
-        audio_files = mp3_files
-        ext = ".mp3"
-    else:
-        print("❌ В папке '{}' нет ни mp3, ни wav файлов.".format(INPUT_FOLDER))
-        return
-
+def merge_files(audio_files, ext):
+    """Объединяет список аудиофайлов одного формата в один файл с паузами."""
     OUTPUT_FILE = OUTPUT_FOLDER / ("merged" + ext)
+    list_file = Path("merge_list_{}.txt".format(ext.lstrip(".")))
 
-    print("Работаем с форматом:", ext)
+    print("\n--- Объединение {} ---".format(ext.upper().lstrip(".")))
     print("Найдено файлов: {}".format(len(audio_files)))
     for i, f in enumerate(audio_files, start=1):
         print("{:02d}. {}".format(i, f.name))
@@ -99,7 +81,7 @@ def main():
     make_silence(FINAL_SILENCE, FINAL_SILENCE_FILE, ext)
 
     # создаём список concat
-    with LIST_FILE.open("w", encoding="utf-8") as f:
+    with list_file.open("w", encoding="utf-8") as f:
         # 1) Пауза в начале
         f.write("file '{}'\n".format(INITIAL_SILENCE_FILE.as_posix()))
 
@@ -124,7 +106,7 @@ def main():
             "-safe",
             "0",
             "-i",
-            str(LIST_FILE),
+            str(list_file),
             "-c",
             "copy",
             str(OUTPUT_FILE),
@@ -138,7 +120,7 @@ def main():
             "-safe",
             "0",
             "-i",
-            str(LIST_FILE),
+            str(list_file),
             "-c:a",
             "pcm_s16le",
             str(OUTPUT_FILE),
@@ -148,7 +130,7 @@ def main():
     subprocess.run(cmd, check=True)
 
     try:
-        LIST_FILE.unlink()
+        list_file.unlink()
     except Exception:
         pass
 
@@ -158,6 +140,26 @@ def main():
     print("Пауза в начале: {} сек".format(INITIAL_SILENCE))
     print("Пауза между файлами: {} сек".format(SILENCE_BETWEEN))
     print("Пауза в конце: {} сек".format(FINAL_SILENCE))
+
+
+def main():
+    print("=== AUDIO MERGER WITH SILENCE (MP3/WAV) ===")
+
+    OUTPUT_FOLDER.mkdir(exist_ok=True)
+
+    # Ищем файлы
+    mp3_files = sorted(INPUT_FOLDER.glob("*.mp3"), key=numeric_key)
+    wav_files = sorted(INPUT_FOLDER.glob("*.wav"), key=numeric_key)
+
+    if not wav_files and not mp3_files:
+        print("❌ В папке '{}' нет ни mp3, ни wav файлов.".format(INPUT_FOLDER))
+        return
+
+    # Обрабатываем каждый формат независимо
+    if wav_files:
+        merge_files(wav_files, ".wav")
+    if mp3_files:
+        merge_files(mp3_files, ".mp3")
 
 
 if __name__ == "__main__":
