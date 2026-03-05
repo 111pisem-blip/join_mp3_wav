@@ -18,7 +18,7 @@ def numeric_key(path: Path):
 
 
 def make_silence(duration: float, filename: Path):
-    """Создаёт WAV-файл тишины нужной длины."""
+    """Создаёт файл тишины нужной длины (wav или mp3)."""
     if filename.exists():
         return
 
@@ -32,11 +32,13 @@ def make_silence(duration: float, filename: Path):
         "anullsrc=r=44100:cl=mono",
         "-t",
         str(duration),
-        "-acodec",
-        "pcm_s16le",
-        str(filename),
     ]
 
+    if filename.suffix == ".wav":
+        cmd += ["-acodec", "pcm_s16le"]
+    # Для .mp3 не указываем кодек — FFmpeg сам выберет доступный
+
+    cmd.append(str(filename))
     subprocess.run(cmd, check=True)
 
 
@@ -50,15 +52,15 @@ def merge_files(audio_files, ext):
     for i, f in enumerate(audio_files, start=1):
         print("{:02d}. {}".format(i, f.name))
 
-    # Файлы тишины (всегда WAV — работает без libmp3lame)
+    # Файлы тишины (в том же формате, что и аудио)
     INITIAL_SILENCE_FILE = Path(
-        "silence_initial_{}ms.wav".format(int(INITIAL_SILENCE * 1000))
+        "silence_initial_{}ms{}".format(int(INITIAL_SILENCE * 1000), ext)
     )
     SILENCE_BETWEEN_FILE = Path(
-        "silence_between_{}ms.wav".format(int(SILENCE_BETWEEN * 1000))
+        "silence_between_{}ms{}".format(int(SILENCE_BETWEEN * 1000), ext)
     )
     FINAL_SILENCE_FILE = Path(
-        "silence_final_{}ms.wav".format(int(FINAL_SILENCE * 1000))
+        "silence_final_{}ms{}".format(int(FINAL_SILENCE * 1000), ext)
     )
 
     # создаём файлы тишины
@@ -82,7 +84,7 @@ def merge_files(audio_files, ext):
 
     # Команда ffmpeg для объединения
     if ext == ".mp3":
-        # MP3: перекодируем (тишина в WAV, поэтому -c copy не подходит)
+        # MP3: без перекодирования, сохраняем оригинальное качество
         cmd = [
             "ffmpeg",
             "-fflags",
@@ -93,8 +95,8 @@ def merge_files(audio_files, ext):
             "0",
             "-i",
             str(list_file),
-            "-ab",
-            "192k",
+            "-c",
+            "copy",
             str(OUTPUT_FILE),
         ]
     else:
