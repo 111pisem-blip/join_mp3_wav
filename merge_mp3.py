@@ -17,14 +17,14 @@ def numeric_key(path: Path):
     return [int(n) for n in nums] if nums else [0]
 
 
-def make_silence(duration: float, filename: Path, ext: str):
-    """Создаёт файл тишины нужной длины (mp3 или wav)."""
+def make_silence(duration: float, filename: Path):
+    """Создаёт WAV-файл тишины нужной длины."""
     if filename.exists():
         return
 
     print("Создаю тишину {} сек → {}".format(duration, filename))
 
-    base_cmd = [
+    cmd = [
         "ffmpeg",
         "-f",
         "lavfi",
@@ -32,24 +32,10 @@ def make_silence(duration: float, filename: Path, ext: str):
         "anullsrc=r=44100:cl=mono",
         "-t",
         str(duration),
+        "-acodec",
+        "pcm_s16le",
+        str(filename),
     ]
-
-    if ext == ".mp3":
-        # MP3 тишина
-        cmd = base_cmd + [
-            "-q:a",
-            "9",
-            "-acodec",
-            "libmp3lame",
-            str(filename),
-        ]
-    else:
-        # WAV тишина (lossless PCM 16-bit)
-        cmd = base_cmd + [
-            "-acodec",
-            "pcm_s16le",
-            str(filename),
-        ]
 
     subprocess.run(cmd, check=True)
 
@@ -64,21 +50,21 @@ def merge_files(audio_files, ext):
     for i, f in enumerate(audio_files, start=1):
         print("{:02d}. {}".format(i, f.name))
 
-    # Файлы тишины (расширение зависит от формата)
+    # Файлы тишины (всегда WAV — работает без libmp3lame)
     INITIAL_SILENCE_FILE = Path(
-        "silence_initial_{}ms{}".format(int(INITIAL_SILENCE * 1000), ext)
+        "silence_initial_{}ms.wav".format(int(INITIAL_SILENCE * 1000))
     )
     SILENCE_BETWEEN_FILE = Path(
-        "silence_between_{}ms{}".format(int(SILENCE_BETWEEN * 1000), ext)
+        "silence_between_{}ms.wav".format(int(SILENCE_BETWEEN * 1000))
     )
     FINAL_SILENCE_FILE = Path(
-        "silence_final_{}ms{}".format(int(FINAL_SILENCE * 1000), ext)
+        "silence_final_{}ms.wav".format(int(FINAL_SILENCE * 1000))
     )
 
     # создаём файлы тишины
-    make_silence(INITIAL_SILENCE, INITIAL_SILENCE_FILE, ext)
-    make_silence(SILENCE_BETWEEN, SILENCE_BETWEEN_FILE, ext)
-    make_silence(FINAL_SILENCE, FINAL_SILENCE_FILE, ext)
+    make_silence(INITIAL_SILENCE, INITIAL_SILENCE_FILE)
+    make_silence(SILENCE_BETWEEN, SILENCE_BETWEEN_FILE)
+    make_silence(FINAL_SILENCE, FINAL_SILENCE_FILE)
 
     # создаём список concat
     with list_file.open("w", encoding="utf-8") as f:
@@ -96,7 +82,7 @@ def merge_files(audio_files, ext):
 
     # Команда ffmpeg для объединения
     if ext == ".mp3":
-        # MP3: без перекодирования оригиналов
+        # MP3: перекодируем (тишина в WAV, поэтому -c copy не подходит)
         cmd = [
             "ffmpeg",
             "-fflags",
@@ -107,8 +93,8 @@ def merge_files(audio_files, ext):
             "0",
             "-i",
             str(list_file),
-            "-c",
-            "copy",
+            "-ab",
+            "192k",
             str(OUTPUT_FILE),
         ]
     else:
